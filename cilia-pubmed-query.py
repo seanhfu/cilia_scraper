@@ -11,10 +11,10 @@ import os
 from datetime import datetime
 from datetime import date
 from openpyxl import load_workbook
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from joblib import load
 import xlsxwriter
-from langchain.schema import (
+from langchain_core.messages import (
     HumanMessage,
     SystemMessage
 )
@@ -66,8 +66,9 @@ try:
 except ValueError:
     print('\n' + '        Incorrect date format, it should be YYYY/MM/DD. Restart [F3 - ENTER] and enter it in this format')
     quit()
-pubs_query_url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%28%28%22Cilia%22[MeSH Terms]+OR+%22Ciliopathies%22[MeSH Terms]%29%29+AND+%28%28%22inhibit%22[Title/Abstract]+OR+inhibits[Title/Abstract]+OR+inhibited[Title/Abstract]+OR+inhibiting[Title/Abstract]+OR+%22promote%22[Title/Abstract]+OR+%22promotes%22[Title/Abstract]+OR+%22promoted%22[Title/Abstract]+OR+%22promoting%22[Title/Abstract]+OR+%22induce%22[Title/Abstract]+OR+%22induces%22[Title/Abstract]+OR+%22induced%22[Title/Abstract]+OR+%22inducing%22[Title/Abstract]+OR+%22regulates%22[Title/Abstract]+OR+%22alter%22[Title/Abstract]+OR+%22altering%22[Title/Abstract]%29%29+AND+%28%28%22small molecule inhibitors%22[Other Term]+OR+%22cilia length%22[Other Term]+OR+%22ciliogenesis%22[Other Term]+OR+%22primary cilia%22[Other Term]%29%29+AND+%28%28%22pharmacological%22[Title/Abstract]+OR+%22drug%22[Title/Abstract]+OR+inhibitor[Title/Abstract]%28%22Published Erratum%22[Publication Type]+OR+%22Retracted Publication%22[Publication Type]+OR+%22Retraction of Publication%22[Publication Type]+OR+Preprint[Publication Type]%29%29+AND+%28%28%22'+ query_start + '%22[PDAT]+:+%22' + str(current_year) + '/12/31%22[PDAT]%29%29&retmax=99999'
+pubs_query_url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%28%22Ciliogenesis%22[MeSH+Terms]+OR+Ciliogen*[Title/Abstract]%29+AND+%28%22assembl*%22[Title/Abstract]+OR+%22disassembl*%22[Title/Abstract]+OR+%22biogenes*%22[Title/Abstract]+OR+%22axonem*%22[Title/Abstract]+OR+%22IFT%22[Title/Abstract]%29+AND+%28%22required+for%22[Title/Abstract]+OR+%22essential+for%22[Title/Abstract]+OR+%22loss+of%22[Title/Abstract]+OR+%22knockout%22[Title/Abstract]+OR+%22proteom*%22[Title/Abstract]+OR+%22interactom*%22[Title/Abstract]%29+NOT+%28%22review%22[Publication+Type]+OR+%22case+report%22[Title/Abstract]+OR+%22Published+Erratum%22[Publication+Type]%29+AND+%28%22' + query_start + '%22[PDAT]+:+%22' + str(current_year) + '/12/31%22[PDAT]%29&retmax=99999'  
 if len(glob.glob(results_files)) != 0:
+    
     most_recent_results = max(glob.glob(results_files), key=os.path.getmtime)
     # create a list of PMIDs from the most recent search results
     global old_data
@@ -100,7 +101,7 @@ wb.close()
 #load MeSH terms-to-R/T Type table
 global type_dict
 type_dict = []
-wb = load_workbook(output_dir + '\Terms for R-T Type.xlsx')
+wb = load_workbook(output_dir + 'Terms for R-T Type.xlsx')
 sheet = wb.active
 for row in sheet.iter_rows():
     type_dict_row = []
@@ -166,6 +167,7 @@ def fetch_records_file():
 
 
 def parse_data(): # parse the data into arrays
+    xml_list = glob.glob(os.path.join(xml_dir, "*.xml"))
     print('\n' + '    3. Parsing data from ' + str(len(xml_list)) + ' files: ')
     month_table = [['01','Jan'],['02','Feb'],['03','Mar'],['04','Apr'],['05','May'],['06','Jun'],['07','Jul'],['08','Aug'],['09','Sep'],['10','Oct'],['11','Nov'],['12','Dec']]
     global new_pmids
@@ -564,38 +566,38 @@ def other_info(text):
 
     load_dotenv()
 
-    chat = ChatOpenAI(openai_api_key=str('OpenAI API key'))
+    chat = ChatOpenAI(openai_api_key=str('OpenAI API Key'))
 
     summary = [
-        SystemMessage(content='''Summarize the article in about 4 to 5 sentences.'''),
+        SystemMessage(content='''Summarize the article in about 3 sentences.'''),
         HumanMessage(content=text[0:4000])
     ]
 
 
     drug = [
-        SystemMessage(content='''What is the name of the drug that was applied in this experiment. State only the drug and nothing else. If no drug was applied, state "No Drug Was Applied".'''),
-        HumanMessage(content=text[0:4000])
-    ]
-
-
-    target = [
-        SystemMessage(content='''What is the name of the target of the drug. State only the name of the target and nothing else. If no target was used, state "No Target".'''),
+        SystemMessage(content='''What is the name of the gene and/or protein that was found to affect the primary cilia? State only the gene and/or protein and nothing else. If no gene or protein was found, state "No Gene or Protein Was Found".'''),
         HumanMessage(content=text[0:4000])
     ]
 
     effect = [
-        SystemMessage(content='''What was the effect of the drug on the target. If there was either no drug identified or no target identified, state "N/A".'''),
+        SystemMessage(content='''What was the effect of the gene/protein on the primary cilia? Be concise with your response. If there was either no gene/protein identified or no target identified, state "N/A".'''),
         HumanMessage(content=text[0:4000])
 
     ]
 
-    title = [
-        SystemMessage(content='''What is the title of the article? Return nothing BUT the title'''),
-        HumanMessage(content=text[0:4000])
-    ]
+    #title = [
+       # SystemMessage(content='''What is the title of the article? Return nothing BUT the title'''),
+      #  HumanMessage(content=text[0:4000])
+    #]
     
     # ML, Treatment Cycle, Medical Indication, Keywords, Title
-    return chat(summary).content, chat(drug).content, chat(target).content, chat(effect).content, chat(title).content
+    return (
+        chat.invoke(summary).content, 
+        chat.invoke(drug).content, 
+        chat.invoke(effect).content, 
+        #chat.invoke(title).content
+    )
+    #return chat(summary).content, chat(drug).content, chat(effect).content, chat(title).content
 
 
 def write_to_xlsx(): # called on at end of parse_data(), if run_delta = n
@@ -661,9 +663,8 @@ def write_to_xlsx(): # called on at end of parse_data(), if run_delta = n
 
     # API Generated Classifications
     worksheet.write_string(0, 20, 'Summary')
-    worksheet.write_string(0, 21, 'Drug Applied')
-    worksheet.write_string(0, 22, 'Targer')
-    worksheet.write_string(0, 23, 'Effect on Target')
+    worksheet.write_string(0, 21, 'Gene/Protein')
+    worksheet.write_string(0, 22, 'Effect on Primary Cilia')
 
     row_no = 1
     for i in range(len(one_to_one)):
@@ -674,7 +675,16 @@ def write_to_xlsx(): # called on at end of parse_data(), if run_delta = n
             pmc_text = pmc_split[-2]
         col = 0
         worksheet.write_url(row_no, col, data_line[17], format_top, string=data_line[0]) # 0 PMID with link
-        worksheet.write_url(row_no, col + 1, data_line[8], format_link) # 1 DOI
+        #worksheet.write_url(row_no, col + 1, data_line[8], format_link) # 1 DOI
+        try:
+            if data_line[8] and str(data_line[8]).startswith('http'):
+                worksheet.write_url(row_no, col + 1, data_line[8], format_link)
+            else:
+                # If it's empty or not a URL, just write the text (or an empty string)
+                worksheet.write(row_no, col + 1, data_line[8], format_header)
+        except ValueError:
+            # This catches the "Unknown URL type" error specifically
+            worksheet.write(row_no, col + 1, data_line[8], format_header)
         if data_line[9]:
             worksheet.write_url(row_no, col + 2, data_line[9], format_link, pmc_text) # 2 PMC Full Text Link
         else:
@@ -697,10 +707,9 @@ def write_to_xlsx(): # called on at end of parse_data(), if run_delta = n
         worksheet.write_string(row_no, col + 18, data_line[16], format_tim) # 18 Tim consolidated info for website
         worksheet.write_string(row_no, col + 19, data_line[17], format_top) # 19 Tim PMID link
        
-        worksheet.write_string(row_no, col + 21, other_info(data_line[15])[0], format_wrap) # 21 Summary
-        worksheet.write_string(row_no, col + 22, other_info(data_line[15])[1], format_wrap) # 22 Drug
-        worksheet.write_string(row_no, col + 23, other_info(data_line[15])[2], format_wrap) # 23 Target
-        worksheet.write_string(row_no, col + 24, other_info(data_line[15])[3], format_wrap) # 24 Effect on target
+        worksheet.write_string(row_no, col + 20, other_info(data_line[15])[0], format_wrap) # 20 Summary
+        worksheet.write_string(row_no, col + 21, other_info(data_line[15])[1], format_wrap) # 21 Gene/protein
+        worksheet.write_string(row_no, col + 22, other_info(data_line[15])[2], format_wrap) # 22 Effect on primary cilia
         row_no += 1
 
     worksheet = workbook.add_worksheet('Authors')
@@ -760,4 +769,4 @@ print('    Records identified:           ' + str(len(pub_id_array)))
 print('    Records received from PubMed: ' + str(len(total_pubs_array)))
 print('    Records parsed:               ' + str(len(new_pmids)))
 
-print(f'XML FILES {xml_list[0]}')
+#print(f'XML FILES {xml_list[0]}')
